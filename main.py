@@ -6,6 +6,10 @@ A simple alternative frontend for browsing RedGifs content
 import logging
 import traceback
 import time
+import sqlite3
+import json
+from datetime import datetime, timedelta
+from pathlib import Path
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
@@ -24,6 +28,129 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 logger = logging.getLogger(__name__)
+
+# SQLite Cache Configuration
+CACHE_DB_PATH = Path("cache.db")
+CACHE_DURATION_HOURS = 24  # Cache for 24 hours
+
+def init_cache_db():
+    """Initialize the SQLite cache database"""
+    conn = sqlite3.connect(CACHE_DB_PATH)
+    cursor = conn.cursor()
+
+    # Create cache table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS api_cache (
+            cache_key TEXT PRIMARY KEY,
+            response_data TEXT NOT NULL,
+            created_at TIMESTAMP NOT NULL,
+            expires_at TIMESTAMP NOT NULL
+        )
+    """)
+
+    # Create index on expires_at for faster cleanup
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_expires_at ON api_cache(expires_at)
+    """)
+
+    conn.commit()
+    conn.close()
+    logger.info(f"Cache database initialized at {CACHE_DB_PATH}")
+
+def get_from_cache(cache_key: str) -> Optional[dict]:
+    """Retrieve data from cache if valid"""
+    try:
+        conn = sqlite3.connect(CACHE_DB_PATH)
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT response_data, expires_at
+            FROM api_cache
+            WHERE cache_key = ?
+        """, (cache_key,))
+
+        result = cursor.fetchone()
+        conn.close()
+
+        if result:
+            response_data, expires_at = result
+            expires_datetime = datetime.fromisoformat(expires_at)
+
+            # Check if cache is still valid
+            if datetime.now() < expires_datetime:
+                logger.info(f"Cache HIT: {cache_key}")
+                return json.loads(response_data)
+            else:
+                logger.info(f"Cache EXPIRED: {cache_key}")
+                # Delete expired entry
+                delete_from_cache(cache_key)
+        else:
+            logger.info(f"Cache MISS: {cache_key}")
+
+        return None
+    except Exception as e:
+        logger.error(f"Cache retrieval error: {str(e)}")
+        return None
+
+def save_to_cache(cache_key: str, response_data: dict, duration_hours: int = CACHE_DURATION_HOURS):
+    """Save data to cache"""
+    try:
+        conn = sqlite3.connect(CACHE_DB_PATH)
+        cursor = conn.cursor()
+
+        created_at = datetime.now()
+        expires_at = created_at + timedelta(hours=duration_hours)
+
+        cursor.execute("""
+            INSERT OR REPLACE INTO api_cache (cache_key, response_data, created_at, expires_at)
+            VALUES (?, ?, ?, ?)
+        """, (
+            cache_key,
+            json.dumps(response_data),
+            created_at.isoformat(),
+            expires_at.isoformat()
+        ))
+
+        conn.commit()
+        conn.close()
+        logger.info(f"Cache SAVE: {cache_key} (expires in {duration_hours}h)")
+    except Exception as e:
+        logger.error(f"Cache save error: {str(e)}")
+
+def delete_from_cache(cache_key: str):
+    """Delete specific cache entry"""
+    try:
+        conn = sqlite3.connect(CACHE_DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM api_cache WHERE cache_key = ?", (cache_key,))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.error(f"Cache delete error: {str(e)}")
+
+def cleanup_expired_cache():
+    """Remove all expired cache entries"""
+    try:
+        conn = sqlite3.connect(CACHE_DB_PATH)
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            DELETE FROM api_cache
+            WHERE expires_at < ?
+        """, (datetime.now().isoformat(),))
+
+        deleted_count = cursor.rowcount
+        conn.commit()
+        conn.close()
+
+        if deleted_count > 0:
+            logger.info(f"Cleaned up {deleted_count} expired cache entries")
+    except Exception as e:
+        logger.error(f"Cache cleanup error: {str(e)}")
+
+# Initialize cache on startup
+init_cache_db()
+cleanup_expired_cache()
 
 app = FastAPI(title="RedGifs Viewer")
 
@@ -162,9 +289,23 @@ async def root():
 async def get_user(username: str):
     """Get user profile information"""
     try:
+        # Create cache key
+        cache_key = f"user_profile:{username}"
+
+        # Try to get from cache first
+        cached_response = get_from_cache(cache_key)
+        if cached_response:
+            return cached_response
+
+        # Cache miss - fetch from API
         rg = get_api()
         user = rg.get_user(username)
-        return user_to_dict(user)
+        response_data = user_to_dict(user)
+
+        # Save to cache
+        save_to_cache(cache_key, response_data)
+
+        return response_data
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"User not found: {str(e)}")
 
@@ -178,6 +319,15 @@ async def get_user_gifs(
 ):
     """Get gifs from a specific user with pagination"""
     try:
+        # Create cache key from request parameters
+        cache_key = f"user_gifs:{username}:{page}:{count}:{order}"
+
+        # Try to get from cache first
+        cached_response = get_from_cache(cache_key)
+        if cached_response:
+            return cached_response
+
+        # Cache miss - fetch from API
         rg = get_api()
         result = rg.search_creator(
             username,
@@ -187,13 +337,18 @@ async def get_user_gifs(
             type=MediaType.GIF
         )
 
-        return {
+        response_data = {
             "page": result.page,
             "pages": result.pages,
             "total": result.total,
             "gifs": [gif_to_dict(g) for g in result.gifs],
             "creator": user_to_dict(result.creator) if result.creator else None,
         }
+
+        # Save to cache
+        save_to_cache(cache_key, response_data)
+
+        return response_data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -207,6 +362,15 @@ async def search_gifs(
 ):
     """Search for gifs by tag/keyword"""
     try:
+        # Create cache key from request parameters
+        cache_key = f"search:{q}:{page}:{count}:{order}"
+
+        # Try to get from cache first
+        cached_response = get_from_cache(cache_key)
+        if cached_response:
+            return cached_response
+
+        # Cache miss - fetch from API
         rg = get_api()
         result = rg.search(
             q,
@@ -215,7 +379,7 @@ async def search_gifs(
             order=order_to_enum(order),
         )
 
-        return {
+        response_data = {
             "searched_for": result.searched_for,
             "page": result.page,
             "pages": result.pages,
@@ -223,6 +387,11 @@ async def search_gifs(
             "gifs": [gif_to_dict(g) for g in result.gifs] if result.gifs else [],
             "tags": result.tags,
         }
+
+        # Save to cache
+        save_to_cache(cache_key, response_data)
+
+        return response_data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -231,11 +400,26 @@ async def search_gifs(
 async def get_trending():
     """Get trending gifs"""
     try:
+        # Create cache key
+        cache_key = "trending:gifs"
+
+        # Try to get from cache first (shorter cache time for trending)
+        cached_response = get_from_cache(cache_key)
+        if cached_response:
+            return cached_response
+
+        # Cache miss - fetch from API
         rg = get_api()
         gifs = rg.get_trending_gifs()
-        return {
+
+        response_data = {
             "gifs": [gif_to_dict(g) for g in gifs]
         }
+
+        # Save to cache with shorter duration (1 hour for trending content)
+        save_to_cache(cache_key, response_data, duration_hours=1)
+
+        return response_data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
