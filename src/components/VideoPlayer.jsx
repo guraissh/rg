@@ -1,4 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { MediaPlayer, MediaProvider } from '@vidstack/react';
+import {
+  DefaultVideoLayout,
+  defaultLayoutIcons
+} from '@vidstack/react/player/layouts/default';
 
 function formatNumber(num) {
   if (num >= 1000000) {
@@ -20,7 +25,6 @@ function VideoPlayer({
   hasPrev,
   hasNext
 }) {
-  const videoRef = useRef(null);
   const [quality, setQuality] = useState('hd');
 
   const videoUrl = quality === 'hd' ? (video.urls?.hd || video.urls?.sd) : video.urls?.sd;
@@ -34,14 +38,6 @@ function VideoPlayer({
       document.body.style.overflow = originalOverflow;
     };
   }, []);
-
-  // Auto-play when video changes
-  useEffect(() => {
-    if (videoRef.current) {
-      videoRef.current.load();
-      videoRef.current.play().catch(() => {});
-    }
-  }, [video.id, quality]);
 
   // Handle click outside video to close
   const handleBackdropClick = (e) => {
@@ -83,16 +79,16 @@ function VideoPlayer({
         </button>
 
         <div className="video-player-container">
-          <video
-            ref={videoRef}
-            className="video-player"
+          <MediaPlayer
+            key={`${video.id}-${quality}`}
             src={videoUrl}
-            controls
             autoPlay
-            loop={false}
             onEnded={handleVideoEnd}
-            playsInline
-          />
+            className="video-player"
+          >
+            <MediaProvider />
+            <DefaultVideoLayout icons={defaultLayoutIcons} />
+          </MediaPlayer>
         </div>
 
         <button

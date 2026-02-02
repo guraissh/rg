@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useMyCollections, useCollectionGifs } from '../hooks';
 import VideoGrid from './VideoGrid';
 import VideoPlayer from './VideoPlayer';
@@ -10,24 +10,74 @@ function formatNumber(num) {
 }
 
 function CollectionCard({ collection, onClick }) {
-  const thumbnail = collection.cover || collection.preview?.urls?.thumbnail;
+  const [imgError, setImgError] = useState(false);
+  const [isHovering, setIsHovering] = useState(false);
+  const videoRef = useRef(null);
+
+  // API uses: folderId, folderName, contentCount, thumb/thumbs/thumba
+  // thumbs = static image, thumba = animated mp4
+  const name = collection.folderName || collection.name || 'Untitled';
+  const staticThumb = collection.thumbs || collection.thumb;
+  const animatedThumb = collection.thumba;
+  const count = collection.contentCount ?? collection.gifCount ?? 0;
+  const showImage = staticThumb && !imgError;
+
+  useEffect(() => {
+    if (isHovering && videoRef.current) {
+      videoRef.current.play();
+    } else if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.currentTime = 0;
+    }
+  }, [isHovering]);
 
   return (
-    <div className="collection-card" onClick={() => onClick(collection)}>
+    <div
+      className="collection-card"
+      onClick={() => onClick(collection)}
+      onMouseEnter={() => setIsHovering(true)}
+      onMouseLeave={() => setIsHovering(false)}
+    >
       <div className="collection-thumbnail">
-        {thumbnail ? (
-          <img src={thumbnail} alt={collection.name} loading="lazy" />
+        {showImage ? (
+          <>
+            <img
+              src={staticThumb}
+              alt={name}
+              loading="lazy"
+              onError={() => setImgError(true)}
+              style={{ opacity: isHovering && animatedThumb ? 0 : 1 }}
+            />
+            {animatedThumb && (
+              <video
+                ref={videoRef}
+                src={animatedThumb}
+                muted
+                loop
+                playsInline
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  opacity: isHovering ? 1 : 0,
+                }}
+              />
+            )}
+          </>
         ) : (
           <div className="collection-placeholder">
-            <span>{collection.name?.charAt(0).toUpperCase() || 'C'}</span>
+            <span>{name.charAt(0).toUpperCase()}</span>
           </div>
         )}
         <div className="collection-overlay">
-          <span className="collection-count">{collection.gifCount || 0} videos</span>
+          <span className="collection-count">{count} videos</span>
         </div>
       </div>
       <div className="collection-info">
-        <h3 className="collection-name">{collection.name || 'Untitled Collection'}</h3>
+        <h3 className="collection-name">{name}</h3>
         {collection.description && (
           <p className="collection-description">{collection.description}</p>
         )}
@@ -49,16 +99,17 @@ function CollectionsView({ onCreatorSelect }) {
     error: collectionsError,
   } = useMyCollections({ page, count: 20 });
 
-  // Fetch videos for selected collection
+  // Fetch videos for selected collection (API uses folderId)
+  const collectionId = selectedCollection?.folderId || selectedCollection?.id;
   const {
     data: collectionGifsData,
     isLoading: gifsLoading,
     isFetching: gifsFetching,
-  } = useCollectionGifs(selectedCollection?.id, { page: collectionPage, count: 40 });
+  } = useCollectionGifs(collectionId, { page: collectionPage, count: 40 });
 
   const collections = collectionsData?.collections || [];
   const totalPages = collectionsData?.pages || 0;
-  const totalCollections = collectionsData?.total || 0;
+  const totalCollections = collectionsData?.totalCount ?? collectionsData?.total ?? 0;
 
   const videos = collectionGifsData?.gifs || [];
   const videosTotalPages = collectionGifsData?.pages || 0;
@@ -128,6 +179,9 @@ function CollectionsView({ onCreatorSelect }) {
 
   // Show collection detail view
   if (selectedCollection) {
+    const collectionName = selectedCollection.folderName || selectedCollection.name || 'Collection';
+    const collectionCount = selectedCollection.contentCount ?? selectedCollection.gifCount ?? 0;
+
     return (
       <div className="collections-view">
         <div className="collection-detail-header">
@@ -135,9 +189,9 @@ function CollectionsView({ onCreatorSelect }) {
             &#8592; Back to Collections
           </button>
           <div className="collection-detail-info">
-            <h2>{selectedCollection.name}</h2>
+            <h2>{collectionName}</h2>
             <span className="collection-detail-count">
-              {formatNumber(selectedCollection.gifCount || 0)} videos
+              {formatNumber(collectionCount)} videos
             </span>
           </div>
         </div>
@@ -196,9 +250,9 @@ function CollectionsView({ onCreatorSelect }) {
       </div>
 
       <div className="collections-grid">
-        {collections.map((collection) => (
+        {collections.map((collection, index) => (
           <CollectionCard
-            key={collection.id}
+            key={collection.folderId || collection.id || index}
             collection={collection}
             onClick={handleCollectionSelect}
           />

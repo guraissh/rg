@@ -1,50 +1,60 @@
 import { useAuth } from '../AuthContext';
 
-function Sidebar({ currentView, onViewChange, isOpen = true }) {
+function Sidebar({ currentView, onViewChange, isOpen = true, isCollapsed = false }) {
   const { isAuthenticated } = useAuth();
 
-  const publicLinks = [
-    { id: 'search', label: 'Search Users', icon: '&#128269;' },
+  const mainLinks = [
+    { id: 'search', label: 'Home', icon: '🏠' },
+    { id: 'for-you', label: 'For You', icon: '🔥', requiresAuth: true },
   ];
 
-  const authLinks = [
-    { id: 'for-you', label: 'For You', icon: '&#9733;' },
-    { id: 'following-feed', label: 'Following Feed', icon: '&#128240;' },
-    { id: 'following', label: 'Followed Creators', icon: '&#128101;' },
-    { id: 'niches', label: 'My Niches', icon: '&#128218;' },
-    { id: 'liked', label: 'Liked', icon: '&#10084;' },
-    { id: 'collections', label: 'Collections', icon: '&#128193;' },
+  const libraryLinks = [
+    { id: 'following-feed', label: 'Following', icon: '▶️' },
+    { id: 'liked', label: 'Liked', icon: '👍' },
+    { id: 'collections', label: 'Collections', icon: '📁' },
   ];
+
+  const exploreLinks = [
+    { id: 'following', label: 'Subscriptions', icon: '📺' },
+    { id: 'niches', label: 'Categories', icon: '🎯' },
+  ];
+
+  const renderLink = (link) => {
+    if (link.requiresAuth && !isAuthenticated) return null;
+
+    return (
+      <button
+        key={link.id}
+        className={`sidebar-link ${currentView === link.id ? 'active' : ''}`}
+        onClick={() => onViewChange(link.id)}
+        title={isCollapsed ? link.label : undefined}
+      >
+        <span className="sidebar-icon">{link.icon}</span>
+        {!isCollapsed && <span className="sidebar-label">{link.label}</span>}
+      </button>
+    );
+  };
 
   return (
-    <nav className={`sidebar ${isOpen ? 'open' : ''}`}>
+    <nav className={`sidebar ${isOpen ? 'open' : ''} ${isCollapsed ? 'collapsed' : ''}`}>
       <div className="sidebar-section">
-        {publicLinks.map(link => (
-          <button
-            key={link.id}
-            className={`sidebar-link ${currentView === link.id ? 'active' : ''}`}
-            onClick={() => onViewChange(link.id)}
-          >
-            <span className="sidebar-icon" dangerouslySetInnerHTML={{ __html: link.icon }} />
-            <span className="sidebar-label">{link.label}</span>
-          </button>
-        ))}
+        {mainLinks.map(renderLink)}
       </div>
 
       {isAuthenticated && (
-        <div className="sidebar-section">
-          <div className="sidebar-section-title">My Content</div>
-          {authLinks.map(link => (
-            <button
-              key={link.id}
-              className={`sidebar-link ${currentView === link.id ? 'active' : ''}`}
-              onClick={() => onViewChange(link.id)}
-            >
-              <span className="sidebar-icon" dangerouslySetInnerHTML={{ __html: link.icon }} />
-              <span className="sidebar-label">{link.label}</span>
-            </button>
-          ))}
-        </div>
+        <>
+          <div className="sidebar-divider" />
+          <div className="sidebar-section">
+            {!isCollapsed && <div className="sidebar-section-title">You</div>}
+            {libraryLinks.map(renderLink)}
+          </div>
+
+          <div className="sidebar-divider" />
+          <div className="sidebar-section">
+            {!isCollapsed && <div className="sidebar-section-title">Explore</div>}
+            {exploreLinks.map(renderLink)}
+          </div>
+        </>
       )}
     </nav>
   );
