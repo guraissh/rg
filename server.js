@@ -4,26 +4,89 @@ import { fetchWrapper } from './fetch';
 const app = express();
 const PORT = 3001;
 
+// Your refresh token from redgifs.com (grab from browser cookies/storage after logging in)
+const USER_REFRESH_TOKEN = process.env.REDGIFS_REFRESH_TOKEN || null;
+
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Cache for the anonymous access token
-let tokenCache = {
-  token: null,
+// Cache for authenticated user token
+let userTokenCache = {
+  accessToken: null,
   expiresAt: 0
 };
 
-// Cache for authenticated user tokens (keyed by access_token)
-const userTokenCache = new Map();
+// Cache for anonymous fallback token
+let anonTokenCache = {
+  token: null,
+  sessionId: null,
+  expiresAt: 0
+};
 
-// Get or refresh anonymous access token
-async function getAccessToken() {
-  if (tokenCache.token && Date.now() < tokenCache.expiresAt) {
-    return tokenCache.token;
+// Get authenticated user access token (refreshes automatically via Kinde OAuth)
+async function getUserAccessToken(forceRefresh = false) {
+  if (!USER_REFRESH_TOKEN) {
+    return null;
   }
 
-  const response = await fetchWrapper('https://api.redgifs.com/v2/auth/temporary', {
+  if (!forceRefresh && userTokenCache.accessToken && Date.now() < userTokenCache.expiresAt) {
+    return userTokenCache.accessToken;
+  }
+
+  console.log('Refreshing user access token...');
+  const response = await fetchWrapper('https://auth2.redgifs.com/oauth2/token', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36',
+      'Origin': 'https://www.redgifs.com',
+      'Referer': 'https://www.redgifs.com/',
+      'Cookie': `refresh_token=${USER_REFRESH_TOKEN}`
+    },
+    body: new URLSearchParams({
+      client_id: 'e06c34dac7654821bcb37e0393b54350',
+      grant_type: 'refresh_token'
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('Failed to refresh user token:', response.status, errorText);
+    return null;
+  }
+
+  const data = await response.json();
+  console.log('Refresh response keys:', Object.keys(data));
+  // RedGifs API expects the id_token (JWT), not the access_token
+  const token = data.id_token || data.access_token;
+
+  if (!token) {
+    console.error('No token in refresh response:', Object.keys(data));
+    return null;
+  }
+
+  userTokenCache = {
+    accessToken: token,
+    expiresAt: Date.now() + ((data.expires_in || 82800) * 1000)
+  };
+
+  console.log('User token refreshed successfully');
+  return userTokenCache.accessToken;
+}
+
+// Get anonymous access token (fallback)
+async function getAnonAccessToken(forceRefresh = false) {
+  if (!forceRefresh && anonTokenCache.token && Date.now() < anonTokenCache.expiresAt) {
+    return { token: anonTokenCache.token, sessionId: anonTokenCache.sessionId };
+  }
+
+  const url = new URL('https://api.redgifs.com/v2/auth/temporary');
+  if (anonTokenCache.sessionId) {
+    url.searchParams.append('session_id', anonTokenCache.sessionId);
+  }
+
+  const response = await fetchWrapper(url.toString(), {
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',
@@ -38,109 +101,34 @@ async function getAccessToken() {
   }
 
   const data = await response.json();
-  tokenCache = {
+  anonTokenCache = {
     token: data.token,
-    expiresAt: Date.now() + (23 * 60 * 60 * 1000) // 23 hours
+    sessionId: data.session,
+    expiresAt: Date.now() + (23 * 60 * 60 * 1000)
   };
 
-  return tokenCache.token;
+  return { token: anonTokenCache.token, sessionId: anonTokenCache.sessionId };
 }
 
-// OAuth token exchange endpoint
-app.post('/auth/token', async (req, res) => {
-  try {
-    const { client_id, grant_type = 'client_credentials' } = req.body;
-
-    if (!client_id) {
-      return res.status(400).json({ error: 'client_id is required' });
-    }
-
-    const response = await fetchWrapper('https://auth2.redgifs.com/oauth2/token', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      },
-      body: new URLSearchParams({
-        client_id,
-        grant_type
-      })
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      return res.status(response.status).json(data);
-    }
-
-    // Cache the user token
-    if (data.access_token) {
-      userTokenCache.set(data.access_token, {
-        ...data,
-        expiresAt: Date.now() + (data.expires_in * 1000)
-      });
-    }
-
-    res.json(data);
-  } catch (error) {
-    console.error('OAuth error:', error);
-    res.status(500).json({ error: error.message });
+// Get best available token (user token preferred, anon fallback)
+async function getAccessToken(forceRefresh = false) {
+  const userToken = await getUserAccessToken(forceRefresh);
+  if (userToken) {
+    return { token: userToken, sessionId: null, isAuthenticated: true };
   }
-});
 
-// Refresh token endpoint
-app.post('/auth/refresh', async (req, res) => {
-  try {
-    const { refresh_token } = req.body;
-
-    if (!refresh_token) {
-      return res.status(400).json({ error: 'refresh_token is required' });
-    }
-
-    const response = await fetchWrapper('https://auth2.redgifs.com/oauth2/token', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36',
-        'Origin': 'https://www.redgifs.com',
-        'Referer': 'https://www.redgifs.com/',
-        'Cookie': `refresh_token=${refresh_token}`
-      },
-      body: new URLSearchParams({
-        client_id: 'e06c34dac7654821bcb37e0393b54350',
-        grant_type: 'refresh_token'
-      })
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      return res.status(response.status).json(data);
-    }
-
-    // Update cached token
-    if (data.access_token) {
-      userTokenCache.set(data.access_token, {
-        ...data,
-        expiresAt: Date.now() + (data.expires_in * 1000)
-      });
-    }
-
-    res.json(data);
-  } catch (error) {
-    console.error('Refresh token error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
+  const anon = await getAnonAccessToken(forceRefresh);
+  return { ...anon, isAuthenticated: false };
+}
 
 // Proxy endpoint for RedGifs API
 app.all('/api/*', async (req, res) => {
-  try {
-    const path = req.params[0];
+  const RETRY_LIMIT = 3;
 
-    // Check if client provided their own auth token
-    const clientAuth = req.headers['x-user-token'];
-    const token = clientAuth || await getAccessToken();
+  async function makeRequest(retry = 0) {
+    const path = req.params[0];
+    const forceRefresh = retry > 0;
+    const { token, sessionId, isAuthenticated } = await getAccessToken(forceRefresh);
 
     const url = new URL(`https://api.redgifs.com/${path}`);
 
@@ -160,6 +148,11 @@ app.all('/api/*', async (req, res) => {
       }
     };
 
+    // Add session ID header for anonymous sessions
+    if (sessionId && !isAuthenticated) {
+      fetchOptions.headers['X-Session-Id'] = sessionId;
+    }
+
     if (req.method !== 'GET' && req.method !== 'HEAD' && req.body) {
       fetchOptions.body = JSON.stringify(req.body);
     }
@@ -167,7 +160,21 @@ app.all('/api/*', async (req, res) => {
     const response = await fetchWrapper(url.toString(), fetchOptions);
     const data = await response.json();
 
-    res.status(response.status).json(data);
+    // Handle 401 with retry logic
+    if (response.status === 401 && retry < RETRY_LIMIT) {
+      console.debug(`Request failed with 401, refreshing token, retry=${retry + 1}`);
+      // Clear cached tokens to force refresh
+      userTokenCache.expiresAt = 0;
+      anonTokenCache.expiresAt = 0;
+      return makeRequest(retry + 1);
+    }
+
+    return { status: response.status, data };
+  }
+
+  try {
+    const { status, data } = await makeRequest();
+    res.status(status).json(data);
   } catch (error) {
     console.error('Proxy error:', error);
     res.status(500).json({ error: error.message });
@@ -177,6 +184,20 @@ app.all('/api/*', async (req, res) => {
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
+});
+
+// Auth status endpoint
+app.get('/status', async (req, res) => {
+  const hasRefreshToken = !!USER_REFRESH_TOKEN;
+  const userToken = await getUserAccessToken();
+  const isAuthenticated = !!userToken;
+
+  res.json({
+    mode: isAuthenticated ? 'authenticated' : 'anonymous',
+    refreshTokenConfigured: hasRefreshToken,
+    userTokenCached: !!userTokenCache.accessToken,
+    anonTokenCached: !!anonTokenCache.token
+  });
 });
 
 app.listen(PORT, () => {
