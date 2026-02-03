@@ -1,3 +1,7 @@
+import { useState, useEffect } from 'react';
+import { proxyMediaUrl, followUser, unfollowUser, getMyFollowing } from '../api';
+import { useAuth } from '../AuthContext';
+
 function formatNumber(num) {
   if (num >= 1000000) {
     return (num / 1000000).toFixed(1) + 'M';
@@ -8,12 +12,66 @@ function formatNumber(num) {
   return num?.toString() || '0';
 }
 
+function FollowButton({ username }) {
+  const [isFollowing, setIsFollowing] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function checkFollowing() {
+      try {
+        const data = await getMyFollowing({ page: 1, count: 1000 });
+        const following = data.items?.some(u => u.username === username) || false;
+        if (!cancelled) setIsFollowing(following);
+      } catch (err) {
+        if (!cancelled) setIsFollowing(false);
+      }
+    }
+    checkFollowing();
+    return () => { cancelled = true; };
+  }, [username]);
+
+  const handleFollowToggle = async () => {
+    if (isLoading) return;
+    setIsLoading(true);
+    try {
+      if (isFollowing) {
+        await unfollowUser(username);
+        setIsFollowing(false);
+      } else {
+        await followUser(username);
+        setIsFollowing(true);
+      }
+    } catch (err) {
+      console.error('Failed to update follow status:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (isFollowing === null) {
+    return <button className="follow-btn" disabled>...</button>;
+  }
+
+  return (
+    <button
+      onClick={handleFollowToggle}
+      disabled={isLoading}
+      className={`follow-btn ${isFollowing ? 'following' : ''}`}
+    >
+      {isLoading ? '...' : isFollowing ? 'Following' : 'Follow'}
+    </button>
+  );
+}
+
 function UserProfile({ user }) {
+  const { isAuthenticated } = useAuth();
+
   return (
     <div className="user-profile">
       <div className="user-avatar">
         {user.profileImageUrl ? (
-          <img src={user.profileImageUrl} alt={user.username} />
+          <img src={proxyMediaUrl(user.profileImageUrl)} alt={user.username} />
         ) : (
           user.username?.[0]?.toUpperCase() || '?'
         )}
@@ -35,6 +93,9 @@ function UserProfile({ user }) {
             >
               <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
             </svg>
+          )}
+          {isAuthenticated && (
+            <FollowButton key={user.username} username={user.username} />
           )}
         </h1>
         <div className="user-stats">

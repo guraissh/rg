@@ -1,4 +1,5 @@
 import { useMyNiches } from '../hooks';
+import { proxyMediaUrl } from '../api';
 
 function formatNumber(num) {
   if (num >= 1000000) {
@@ -15,7 +16,7 @@ function NicheCard({ niche }) {
     <div className="niche-card">
       <div className="niche-thumbnail">
         {niche.thumbnail ? (
-          <img src={niche.thumbnail} alt={niche.name} loading="lazy" />
+          <img src={proxyMediaUrl(niche.thumbnail)} alt={niche.name} loading="lazy" />
         ) : (
           <div className="niche-placeholder">
             <svg viewBox="0 0 24 24" width="48" height="48" fill="currentColor" style={{ opacity: 0.4 }}>

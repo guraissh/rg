@@ -10,6 +10,7 @@ function TagSelector({ selectedTags, onTagsChange, onSearch }) {
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const inputRef = useRef(null);
   const dropdownRef = useRef(null);
+  const wrapperRef = useRef(null);
 
   const filteredTags = useMemo(() => {
     if (!inputValue.trim()) {
@@ -31,13 +32,18 @@ function TagSelector({ selectedTags, onTagsChange, onSearch }) {
       if (
         dropdownRef.current &&
         !dropdownRef.current.contains(e.target) &&
-        !inputRef.current.contains(e.target)
+        wrapperRef.current &&
+        !wrapperRef.current.contains(e.target)
       ) {
         setIsOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
   }, []);
 
   // Reset highlighted index when filtered results change
@@ -60,7 +66,10 @@ function TagSelector({ selectedTags, onTagsChange, onSearch }) {
     }
     setInputValue('');
     setIsOpen(false);
-    inputRef.current?.focus();
+    // Only refocus on desktop - on mobile the keyboard is disruptive
+    if (window.innerWidth > 768) {
+      inputRef.current?.focus();
+    }
   };
 
   const removeTag = (tagKey) => {
@@ -98,7 +107,7 @@ function TagSelector({ selectedTags, onTagsChange, onSearch }) {
 
   return (
     <form className="tag-selector" onSubmit={handleSubmit}>
-      <div className="tag-selector-input-wrapper">
+      <div className="tag-selector-input-wrapper" ref={wrapperRef}>
         <div className="tag-selector-tags">
           {selectedTags.map(tagKey => (
             <span key={tagKey} className="tag-chip">
@@ -138,7 +147,11 @@ function TagSelector({ selectedTags, onTagsChange, onSearch }) {
       </div>
 
       {isOpen && filteredTags.length > 0 && (
-        <div ref={dropdownRef} className="tag-dropdown">
+        <div
+          ref={dropdownRef}
+          className="tag-dropdown"
+          onTouchMove={(e) => e.stopPropagation()}
+        >
           {filteredTags.map((tag, index) => (
             <button
               key={tag.key}

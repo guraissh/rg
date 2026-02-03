@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useMyFollowing } from '../hooks';
+import { proxyMediaUrl } from '../api';
 
 function formatNumber(num) {
   if (num >= 1000000) {
@@ -16,7 +17,7 @@ function CreatorCard({ creator, onSelect }) {
     <div className="creator-card" onClick={() => onSelect(creator.username)}>
       <div className="creator-avatar">
         {creator.profileImageUrl ? (
-          <img src={creator.profileImageUrl} alt={creator.username} />
+          <img src={proxyMediaUrl(creator.profileImageUrl)} alt={creator.username} />
         ) : (
           creator.username?.[0]?.toUpperCase() || '?'
         )}

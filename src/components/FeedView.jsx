@@ -1,7 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useForYouFeed, useLikedFeed, useMyFollowing } from '../hooks';
 import { getUserVideos } from '../api';
-import { useAuth } from '../AuthContext';
 import { useQuery } from '@tanstack/react-query';
 import VideoGrid from './VideoGrid';
 import VideoPlayer from './VideoPlayer';
@@ -9,7 +8,6 @@ import VideoPlayer from './VideoPlayer';
 function FeedView({ type, onCreatorSelect, columns = 4 }) {
   const [page, setPage] = useState(1);
   const [selectedVideoIndex, setSelectedVideoIndex] = useState(null);
-  const { getToken } = useAuth();
 
   // Choose the appropriate hook based on feed type
   const forYouQuery = useForYouFeed({ page, count: 40 });

@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { proxyMediaUrl } from '../api';
 
 function formatDuration(seconds) {
   if (!seconds) return '0:00';
@@ -37,6 +38,8 @@ function VideoCard({ video, index, onSelect, showCreator, onCreatorClick, linkBu
   const [imageLoaded, setImageLoaded] = useState(false);
   const videoRef = useRef(null);
   const hoverTimeoutRef = useRef(null);
+  const touchStartRef = useRef(null);
+  const longPressTriggeredRef = useRef(false);
 
   const handleMouseEnter = () => {
     hoverTimeoutRef.current = setTimeout(() => {
@@ -49,6 +52,30 @@ function VideoCard({ video, index, onSelect, showCreator, onCreatorClick, linkBu
       clearTimeout(hoverTimeoutRef.current);
     }
     setIsHovering(false);
+  };
+
+  const handleTouchStart = (e) => {
+    longPressTriggeredRef.current = false;
+    touchStartRef.current = setTimeout(() => {
+      longPressTriggeredRef.current = true;
+      setIsHovering(true);
+    }, 400);
+  };
+
+  const handleTouchEnd = (e) => {
+    if (touchStartRef.current) {
+      clearTimeout(touchStartRef.current);
+    }
+    if (longPressTriggeredRef.current) {
+      e.preventDefault();
+      setIsHovering(false);
+    }
+  };
+
+  const handleTouchMove = () => {
+    if (touchStartRef.current) {
+      clearTimeout(touchStartRef.current);
+    }
   };
 
   const handleCreatorClick = (e) => {
@@ -64,8 +91,8 @@ function VideoCard({ video, index, onSelect, showCreator, onCreatorClick, linkBu
     onSelect(index);
   };
 
-  const thumbnailUrl = video.urls?.thumbnail || video.urls?.poster;
-  const previewUrl = video.urls?.silent || video.urls?.sd;
+  const thumbnailUrl = proxyMediaUrl(video.urls?.thumbnail || video.urls?.poster);
+  const previewUrl = proxyMediaUrl(video.urls?.silent || video.urls?.sd);
 
   // Build the video URL for the link
   const href = linkBuilder ? linkBuilder(video) : `/videos/${encodeURIComponent(video.id)}`;
@@ -77,6 +104,9 @@ function VideoCard({ video, index, onSelect, showCreator, onCreatorClick, linkBu
       onClick={handleClick}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onTouchMove={handleTouchMove}
     >
       <div className="video-thumbnail">
         <img

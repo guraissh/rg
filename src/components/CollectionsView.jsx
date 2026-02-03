@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useMyCollections } from '../hooks';
+import { proxyMediaUrl } from '../api';
 
 function formatNumber(num) {
   if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
@@ -13,8 +14,8 @@ function CollectionCard({ collection, onClick }) {
   const videoRef = useRef(null);
 
   const name = collection.folderName || collection.name || 'Untitled';
-  const staticThumb = collection.thumbs || collection.thumb;
-  const animatedThumb = collection.thumba;
+  const staticThumb = proxyMediaUrl(collection.thumbs || collection.thumb);
+  const animatedThumb = proxyMediaUrl(collection.thumba);
   const count = collection.contentCount ?? collection.gifCount ?? 0;
   const showImage = staticThumb && !imgError;
 

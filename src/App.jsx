@@ -215,11 +215,25 @@ function App() {
   const [videoId, setVideoId] = useState(initialState.videoId);
   const [collectionId, setCollectionId] = useState(initialState.collectionId);
   const [showLoginModal, setShowLoginModal] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 768);
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768);
   const [gridColumns, setGridColumns] = useState(() => {
     const saved = localStorage.getItem('gridColumns');
     return saved ? parseInt(saved, 10) : 4;
   });
+
+  // Track mobile state
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth <= 768;
+      setIsMobile(mobile);
+      if (!mobile && !sidebarOpen) {
+        setSidebarOpen(true);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [sidebarOpen]);
 
   const isNavigatingRef = useRef(false);
 
@@ -385,6 +399,10 @@ function App() {
         setOrder('trending');
       }
       setCurrentView('tag-search');
+      // Close sidebar on mobile when searching
+      if (isMobile) {
+        setSidebarOpen(false);
+      }
     }
   };
 
@@ -395,6 +413,10 @@ function App() {
     setVideoId(null);
     setCollectionId(null);
     setCurrentView('search');
+    // Close sidebar on mobile when selecting a creator
+    if (isMobile) {
+      setSidebarOpen(false);
+    }
   };
 
   const handleVideoSelect = useCallback((index) => {
@@ -439,6 +461,10 @@ function App() {
     if (view !== 'search' && view !== 'tag-search') {
       setUsername('');
     }
+    // Close sidebar on mobile when navigating
+    if (isMobile) {
+      setSidebarOpen(false);
+    }
   };
 
   const handleCollectionSelect = useCallback((collection) => {
@@ -463,6 +489,9 @@ function App() {
     setOrder('recent');
     setVideoId(null);
     setCollectionId(null);
+    if (isMobile) {
+      setSidebarOpen(false);
+    }
   };
 
   // Keyboard navigation
@@ -804,6 +833,14 @@ function App() {
       </header>
 
       <div className="app-body">
+        {/* Mobile sidebar backdrop */}
+        {isMobile && (
+          <div
+            className={`sidebar-backdrop ${sidebarOpen ? 'visible' : ''}`}
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+
         <Sidebar
           currentView={currentView === 'collection' ? 'collections' : currentView}
           onViewChange={handleViewChange}

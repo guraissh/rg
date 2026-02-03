@@ -83,56 +83,44 @@ export function useUserCollections(username, options = {}) {
 // ============ Authenticated Hooks ============
 
 export function useMe() {
-  const { isAuthenticated, getToken } = useAuth();
+  const { isAuthenticated } = useAuth();
 
   return useQuery({
     queryKey: ['me'],
-    queryFn: async () => {
-      const token = await getToken();
-      return getMe(token);
-    },
+    queryFn: () => getMe(),
     enabled: isAuthenticated,
   });
 }
 
 export function useMyFollowing(options = {}) {
   const { page = 1, count = 40 } = options;
-  const { isAuthenticated, getToken } = useAuth();
+  const { isAuthenticated } = useAuth();
 
   return useQuery({
     queryKey: ['myFollowing', page, count],
-    queryFn: async () => {
-      const token = await getToken();
-      return getMyFollowing({ page, count, token });
-    },
+    queryFn: () => getMyFollowing({ page, count }),
     enabled: isAuthenticated,
     placeholderData: (previousData) => previousData,
   });
 }
 
 export function useMyNiches() {
-  const { isAuthenticated, getToken } = useAuth();
+  const { isAuthenticated } = useAuth();
 
   return useQuery({
     queryKey: ['myNiches'],
-    queryFn: async () => {
-      const token = await getToken();
-      return getMyNiches(token);
-    },
+    queryFn: () => getMyNiches(),
     enabled: isAuthenticated,
   });
 }
 
 export function useForYouFeed(options = {}) {
   const { page = 1, count = 40 } = options;
-  const { isAuthenticated, getToken } = useAuth();
+  const { isAuthenticated } = useAuth();
 
   return useQuery({
     queryKey: ['forYouFeed', page, count],
-    queryFn: async () => {
-      const token = await getToken();
-      return getForYouFeed({ page, count, token });
-    },
+    queryFn: () => getForYouFeed({ page, count }),
     enabled: isAuthenticated,
     placeholderData: (previousData) => previousData,
   });
@@ -140,14 +128,11 @@ export function useForYouFeed(options = {}) {
 
 export function useLikedFeed(options = {}) {
   const { page = 1, count = 40, type = 'g' } = options;
-  const { isAuthenticated, getToken } = useAuth();
+  const { isAuthenticated } = useAuth();
 
   return useQuery({
     queryKey: ['likedFeed', page, count, type],
-    queryFn: async () => {
-      const token = await getToken();
-      return getLikedFeed({ page, count, type, token });
-    },
+    queryFn: () => getLikedFeed({ page, count, type }),
     enabled: isAuthenticated,
     placeholderData: (previousData) => previousData,
   });
@@ -155,28 +140,22 @@ export function useLikedFeed(options = {}) {
 
 export function useMyCollections(options = {}) {
   const { page = 1, count = 20 } = options;
-  const { isAuthenticated, getToken } = useAuth();
+  const { isAuthenticated } = useAuth();
 
   return useQuery({
     queryKey: ['myCollections', page, count],
-    queryFn: async () => {
-      const token = await getToken();
-      return getMyCollections({ page, count, token });
-    },
+    queryFn: () => getMyCollections({ page, count }),
     enabled: isAuthenticated,
   });
 }
 
 export function useCollectionGifs(collectionId, options = {}) {
   const { page = 1, count = 40 } = options;
-  const { isAuthenticated, getToken } = useAuth();
+  const { isAuthenticated } = useAuth();
 
   return useQuery({
     queryKey: ['collectionGifs', collectionId, page, count],
-    queryFn: async () => {
-      const token = await getToken();
-      return getCollectionGifs(collectionId, { page, count, token });
-    },
+    queryFn: () => getCollectionGifs(collectionId, { page, count }),
     enabled: isAuthenticated && !!collectionId,
     placeholderData: (previousData) => previousData,
   });
@@ -191,14 +170,11 @@ export function useGif(gifId) {
 }
 
 export function useCollection(collectionId) {
-  const { isAuthenticated, getToken } = useAuth();
+  const { isAuthenticated } = useAuth();
 
   return useQuery({
     queryKey: ['collection', collectionId],
-    queryFn: async () => {
-      const token = await getToken();
-      return getCollection(collectionId, { token });
-    },
+    queryFn: () => getCollection(collectionId),
     enabled: isAuthenticated && !!collectionId,
   });
 }

@@ -1,26 +1,25 @@
 const API_BASE = '/api';
+
+// Proxy media URLs through our server to avoid CORS issues
+export function proxyMediaUrl(url) {
+  if (!url) return url;
+  return `/api/media?url=${encodeURIComponent(url)}`;
+}
+
 async function filterOutAi(response) {
   if ('gifs' in response && Array.isArray(response.gifs)) {
     response.gifs = response.gifs.filter(g => g.tags.filter(tag => tag.toLowerCase() === "ai generated" || tag.toLowerCase() === "3d").length === 0)
   }
   return response
 }
+
 export async function fetchApi(endpoint, options = {}) {
-  const { token, ...fetchOptions } = options;
-
-  const headers = {
-    'Content-Type': 'application/json',
-    ...fetchOptions.headers,
-  };
-
-  // Add user token if provided
-  if (token) {
-    headers['X-User-Token'] = token;
-  }
-
   const response = await fetch(`${API_BASE}${endpoint}`, {
-    ...fetchOptions,
-    headers,
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
   });
 
   if (!response.ok) {
@@ -63,53 +62,53 @@ export async function getUserCollections(username, { page = 1, count = 20 } = {}
 
 // ============ Authenticated API endpoints ============
 
-export async function getMe(token) {
-  return fetchApi('/v1/me', { token });
+export async function getMe() {
+  return fetchApi('/v1/me');
 }
 
-export async function getMyFollowing({ page = 1, count = 40, token } = {}) {
+export async function getMyFollowing({ page = 1, count = 40 } = {}) {
   const params = new URLSearchParams({
     page: String(page),
     count: String(count),
   });
-  return fetchApi(`/v2/me/following?${params}`, { token });
+  return fetchApi(`/v2/me/following?${params}`);
 }
 
-export async function getMyNiches(token) {
-  return fetchApi('/v2/niches/following', { token });
+export async function getMyNiches() {
+  return fetchApi('/v2/niches/following');
 }
 
-export async function getForYouFeed({ page = 1, count = 40, token } = {}) {
+export async function getForYouFeed({ page = 1, count = 40 } = {}) {
   const params = new URLSearchParams({
     page: String(page),
     count: String(count),
   });
-  return fetchApi(`/v2/feeds/for-you?${params}`, { token }).then(filterOutAi);
+  return fetchApi(`/v2/feeds/for-you?${params}`).then(filterOutAi);
 }
 
-export async function getLikedFeed({ page = 1, count = 40, type = 'g', token } = {}) {
+export async function getLikedFeed({ page = 1, count = 40, type = 'g' } = {}) {
   const params = new URLSearchParams({
     page: String(page),
     count: String(count),
     type,
   });
-  return fetchApi(`/v2/feeds/liked?${params}`, { token }).then(filterOutAi);
+  return fetchApi(`/v2/feeds/liked?${params}`).then(filterOutAi);
 }
 
-export async function getMyCollections({ page = 1, count = 20, token } = {}) {
+export async function getMyCollections({ page = 1, count = 20 } = {}) {
   const params = new URLSearchParams({
     page: String(page),
     count: String(count),
   });
-  return fetchApi(`/v2/me/collections?${params}`, { token });
+  return fetchApi(`/v2/me/collections?${params}`);
 }
 
-export async function getCollectionGifs(collectionId, { page = 1, count = 40, token } = {}) {
+export async function getCollectionGifs(collectionId, { page = 1, count = 40 } = {}) {
   const params = new URLSearchParams({
     page: String(page),
     count: String(count),
   });
-  return fetchApi(`/v2/me/collections/${encodeURIComponent(collectionId)}/gifs?${params}`, { token }).then(filterOutAi);
+  return fetchApi(`/v2/me/collections/${encodeURIComponent(collectionId)}/gifs?${params}`).then(filterOutAi);
 }
 
 export async function getGif(gifId) {
@@ -133,6 +132,20 @@ export async function search({ tags = [], order = 'trending', count = 40, page =
   return fetchApi(`/v2/gifs/search?${params}`).then(filterOutAi);
 }
 
-export async function getCollection(collectionId, { token } = {}) {
-  return fetchApi(`/v2/me/collections/${encodeURIComponent(collectionId)}`, { token });
+export async function getCollection(collectionId) {
+  return fetchApi(`/v2/me/collections/${encodeURIComponent(collectionId)}`);
+}
+
+export async function followUser(username) {
+  return fetchApi(`/v1/me/follows/${encodeURIComponent(username)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ source: 'profile', position: 0 }),
+  });
+}
+
+export async function unfollowUser(username) {
+  return fetchApi(`/v1/me/follows/${encodeURIComponent(username)}`, {
+    method: 'DELETE',
+    body: JSON.stringify({ source: 'profile' }),
+  });
 }
