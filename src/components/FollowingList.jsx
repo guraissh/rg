@@ -24,12 +24,15 @@ function CreatorCard({ creator, onSelect }) {
       <div className="creator-info">
         <div className="creator-name">
           {creator.name || creator.username}
-          {creator.verified && <span className="verified-badge"> &#10003;</span>}
+          {creator.verified && (
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style={{ color: 'var(--accent-blue)', marginLeft: '6px', verticalAlign: 'middle' }}>
+              <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+            </svg>
+          )}
         </div>
         <div className="creator-username">@{creator.username}</div>
         <div className="creator-stats">
-          <span>{formatNumber(creator.followers)} followers</span>
-          <span>{formatNumber(creator.publishedGifs || creator.gifs)} videos</span>
+          {formatNumber(creator.followers)} followers · {formatNumber(creator.publishedGifs || creator.gifs)} videos
         </div>
       </div>
     </div>
@@ -48,7 +51,7 @@ function FollowingList({ onCreatorSelect }) {
     return (
       <div className="loading">
         <div className="spinner"></div>
-        <p>Loading followed creators...</p>
+        <p style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>Loading subscriptions...</p>
       </div>
     );
   }
@@ -64,7 +67,13 @@ function FollowingList({ onCreatorSelect }) {
   if (creators.length === 0) {
     return (
       <div className="empty">
-        <p>You're not following any creators yet.</p>
+        <div className="empty-icon">
+          <svg viewBox="0 0 24 24" width="64" height="64" fill="currentColor" style={{ opacity: 0.4 }}>
+            <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
+          </svg>
+        </div>
+        <h2 style={{ fontSize: '20px', fontWeight: 600, marginBottom: '8px' }}>No Subscriptions</h2>
+        <p style={{ color: 'var(--text-secondary)' }}>Follow creators on RedGifs to see them here.</p>
       </div>
     );
   }
@@ -72,11 +81,11 @@ function FollowingList({ onCreatorSelect }) {
   return (
     <div className="following-list">
       <div className="list-header">
-        <h2>Followed Creators</h2>
-        <span className="list-count">{total} creators</span>
+        <h2>Subscriptions</h2>
+        <span className="list-count">{formatNumber(total)} creators</span>
       </div>
 
-      <div className="creators-grid" style={{ opacity: isFetching ? 0.7 : 1 }}>
+      <div className="creators-grid" style={{ opacity: isFetching ? 0.6 : 1, transition: 'opacity 0.2s ease-out' }}>
         {creators.map(creator => (
           <CreatorCard
             key={creator.username}
@@ -92,14 +101,14 @@ function FollowingList({ onCreatorSelect }) {
             onClick={() => setPage(p => p - 1)}
             disabled={page === 1 || isFetching}
           >
-            &larr; Previous
+            Previous
           </button>
           <span>Page {page} of {totalPages}</span>
           <button
             onClick={() => setPage(p => p + 1)}
             disabled={page >= totalPages || isFetching}
           >
-            Next &rarr;
+            Next
           </button>
         </div>
       )}

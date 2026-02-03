@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-
+import { fetchWrapper } from './fetch';
 const app = express();
 const PORT = 3001;
 
@@ -23,7 +23,7 @@ async function getAccessToken() {
     return tokenCache.token;
   }
 
-  const response = await fetch('https://api.redgifs.com/v2/auth/temporary', {
+  const response = await fetchWrapper('https://api.redgifs.com/v2/auth/temporary', {
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',
@@ -55,7 +55,7 @@ app.post('/auth/token', async (req, res) => {
       return res.status(400).json({ error: 'client_id is required' });
     }
 
-    const response = await fetch('https://auth2.redgifs.com/oauth2/token', {
+    const response = await fetchWrapper('https://auth2.redgifs.com/oauth2/token', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -97,7 +97,7 @@ app.post('/auth/refresh', async (req, res) => {
       return res.status(400).json({ error: 'refresh_token is required' });
     }
 
-    const response = await fetch('https://auth2.redgifs.com/oauth2/token', {
+    const response = await fetchWrapper('https://auth2.redgifs.com/oauth2/token', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
@@ -164,7 +164,7 @@ app.all('/api/*', async (req, res) => {
       fetchOptions.body = JSON.stringify(req.body);
     }
 
-    const response = await fetch(url.toString(), fetchOptions);
+    const response = await fetchWrapper(url.toString(), fetchOptions);
     const data = await response.json();
 
     res.status(response.status).json(data);

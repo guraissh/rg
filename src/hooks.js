@@ -12,6 +12,9 @@ import {
   getLikedFeed,
   getMyCollections,
   getCollectionGifs,
+  getGif,
+  getCollection,
+  search,
 } from './api';
 import { useAuth } from './AuthContext';
 
@@ -175,6 +178,38 @@ export function useCollectionGifs(collectionId, options = {}) {
       return getCollectionGifs(collectionId, { page, count, token });
     },
     enabled: isAuthenticated && !!collectionId,
+    placeholderData: (previousData) => previousData,
+  });
+}
+
+export function useGif(gifId) {
+  return useQuery({
+    queryKey: ['gif', gifId],
+    queryFn: () => getGif(gifId),
+    enabled: !!gifId,
+  });
+}
+
+export function useCollection(collectionId) {
+  const { isAuthenticated, getToken } = useAuth();
+
+  return useQuery({
+    queryKey: ['collection', collectionId],
+    queryFn: async () => {
+      const token = await getToken();
+      return getCollection(collectionId, { token });
+    },
+    enabled: isAuthenticated && !!collectionId,
+  });
+}
+
+export function useSearch(options = {}) {
+  const { tags = [], order = 'trending', count = 40, page = 1 } = options;
+
+  return useQuery({
+    queryKey: ['search', tags, order, count, page],
+    queryFn: () => search({ tags, order, count, page }),
+    enabled: tags.length > 0 && !!order,
     placeholderData: (previousData) => previousData,
   });
 }

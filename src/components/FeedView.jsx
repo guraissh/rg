@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import VideoGrid from './VideoGrid';
 import VideoPlayer from './VideoPlayer';
 
-function FeedView({ type, onCreatorSelect }) {
+function FeedView({ type, onCreatorSelect, columns = 4 }) {
   const [page, setPage] = useState(1);
   const [selectedVideoIndex, setSelectedVideoIndex] = useState(null);
   const { getToken } = useAuth();
@@ -143,6 +143,7 @@ function FeedView({ type, onCreatorSelect }) {
         onVideoSelect={handleVideoSelect}
         showCreator={true}
         onCreatorClick={handleCreatorClick}
+        columns={columns}
       />
 
       {totalPages > 1 && (

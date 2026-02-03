@@ -32,15 +32,16 @@ function formatDate(timestamp) {
   return `${Math.floor(days / 365)} years ago`;
 }
 
-function VideoCard({ video, index, onSelect, showCreator, onCreatorClick }) {
+function VideoCard({ video, index, onSelect, showCreator, onCreatorClick, linkBuilder }) {
   const [isHovering, setIsHovering] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
   const videoRef = useRef(null);
   const hoverTimeoutRef = useRef(null);
 
   const handleMouseEnter = () => {
     hoverTimeoutRef.current = setTimeout(() => {
       setIsHovering(true);
-    }, 500);
+    }, 400);
   };
 
   const handleMouseLeave = () => {
@@ -51,24 +52,44 @@ function VideoCard({ video, index, onSelect, showCreator, onCreatorClick }) {
   };
 
   const handleCreatorClick = (e) => {
+    e.preventDefault();
     e.stopPropagation();
     if (onCreatorClick && video.userName) {
       onCreatorClick(video.userName);
     }
   };
 
+  const handleClick = (e) => {
+    e.preventDefault();
+    onSelect(index);
+  };
+
   const thumbnailUrl = video.urls?.thumbnail || video.urls?.poster;
   const previewUrl = video.urls?.silent || video.urls?.sd;
 
+  // Build the video URL for the link
+  const href = linkBuilder ? linkBuilder(video) : `/videos/${encodeURIComponent(video.id)}`;
+
   return (
-    <div
+    <a
+      href={href}
       className="video-card"
-      onClick={() => onSelect(index)}
+      onClick={handleClick}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
       <div className="video-thumbnail">
-        {isHovering && previewUrl ? (
+        <img
+          src={thumbnailUrl}
+          alt={video.description || 'Video thumbnail'}
+          loading="lazy"
+          onLoad={() => setImageLoaded(true)}
+          style={{
+            opacity: imageLoaded ? 1 : 0,
+            transition: 'opacity 0.3s ease-out'
+          }}
+        />
+        {isHovering && previewUrl && (
           <video
             ref={videoRef}
             src={previewUrl}
@@ -76,42 +97,99 @@ function VideoCard({ video, index, onSelect, showCreator, onCreatorClick }) {
             muted
             loop
             playsInline
-          />
-        ) : (
-          <img
-            src={thumbnailUrl}
-            alt={video.description || 'Video thumbnail'}
-            loading="lazy"
+            className="video-thumbnail-preview"
           />
         )}
-        <span className="video-duration">{formatDuration(video.duration)}</span>
+        <div className="video-thumbnail-overlay">
+          <span className="video-stat">{formatNumber(video.views)}</span>
+          <span className="video-stat">{formatNumber(video.likes)} ♥</span>
+          <span className="video-duration">{formatDuration(video.duration)}</span>
+        </div>
       </div>
       <div className="video-info">
         {showCreator && video.userName && (
           <div className="video-creator" onClick={handleCreatorClick}>
             @{video.userName}
-            {video.verified && <span className="verified-badge"> &#10003;</span>}
+            {video.verified && (
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style={{ color: 'var(--accent-blue)', marginLeft: '4px' }}>
+                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+              </svg>
+            )}
           </div>
         )}
         <div className="video-title">
           {video.description || video.tags?.join(', ') || 'Untitled'}
         </div>
-        <div className="video-meta">
-          <span>{formatNumber(video.views)} views</span>
-          <span>{formatNumber(video.likes)} likes</span>
-          <span>{formatDate(video.createDate)}</span>
-        </div>
       </div>
+    </a>
+  );
+}
+
+function SkeletonCard({ height = 200 }) {
+  return (
+    <div className="video-card" style={{ pointerEvents: 'none' }}>
+      <div
+        className="video-thumbnail video-thumbnail--skeleton"
+        style={{
+          height: `${height}px`,
+          background: 'linear-gradient(90deg, var(--bg-elevated) 0%, var(--bg-surface) 50%, var(--bg-elevated) 100%)',
+          backgroundSize: '200% 100%',
+          animation: 'shimmer 1.5s infinite'
+        }}
+      />
+      <div className="video-info">
+        <div
+          style={{
+            height: '14px',
+            width: '40%',
+            background: 'var(--bg-surface)',
+            borderRadius: '4px',
+            marginBottom: '10px'
+          }}
+        />
+        <div
+          style={{
+            height: '16px',
+            width: '90%',
+            background: 'var(--bg-surface)',
+            borderRadius: '4px',
+            marginBottom: '8px'
+          }}
+        />
+        <div
+          style={{
+            height: '14px',
+            width: '60%',
+            background: 'var(--bg-surface)',
+            borderRadius: '4px'
+          }}
+        />
+      </div>
+      <style>{`
+        @keyframes shimmer {
+          0% { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
+      `}</style>
     </div>
   );
 }
 
-function VideoGrid({ videos, isLoading, isFetching, onVideoSelect, showCreator = false, onCreatorClick }) {
+function VideoGrid({ videos, isLoading, isFetching, onVideoSelect, showCreator = false, onCreatorClick, linkBuilder, columns = 4 }) {
+  const masonryStyle = {
+    columnCount: columns,
+    opacity: isFetching ? 0.6 : 1,
+    transition: 'opacity 0.2s ease-out'
+  };
+
   if (isLoading) {
+    // Show skeleton cards with varying heights for masonry effect
+    const skeletonHeights = [180, 280, 200, 320, 240, 180, 300, 220];
     return (
-      <div className="loading">
-        <div className="spinner"></div>
-        <p>Loading videos...</p>
+      <div className="video-masonry" style={{ columnCount: columns }}>
+        {skeletonHeights.map((height, i) => (
+          <SkeletonCard key={i} height={height} />
+        ))}
       </div>
     );
   }
@@ -119,13 +197,18 @@ function VideoGrid({ videos, isLoading, isFetching, onVideoSelect, showCreator =
   if (!videos || videos.length === 0) {
     return (
       <div className="empty">
-        <p>No videos found.</p>
+        <div className="empty-icon">
+          <svg viewBox="0 0 24 24" width="64" height="64" fill="currentColor" style={{ opacity: 0.4 }}>
+            <path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z"/>
+          </svg>
+        </div>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '16px' }}>No videos found</p>
       </div>
     );
   }
 
   return (
-    <div className="video-grid" style={{ opacity: isFetching ? 0.7 : 1 }}>
+    <div className="video-masonry" style={masonryStyle}>
       {videos.map((video, index) => (
         <VideoCard
           key={video.id}
@@ -134,6 +217,7 @@ function VideoGrid({ videos, isLoading, isFetching, onVideoSelect, showCreator =
           onSelect={onVideoSelect}
           showCreator={showCreator}
           onCreatorClick={onCreatorClick}
+          linkBuilder={linkBuilder}
         />
       ))}
     </div>
